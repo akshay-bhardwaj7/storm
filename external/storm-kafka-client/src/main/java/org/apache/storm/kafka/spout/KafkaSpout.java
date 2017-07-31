@@ -148,8 +148,8 @@ public class KafkaSpout<K, V> extends BaseRichSpout {
 
         @Override
         public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
-            LOG.info("Partitions reassignment. [consumer-group={}, consumer={}, topic-partitions={}]",
-                    kafkaSpoutConfig.getConsumerGroupId(), kafkaConsumer, partitions);
+            LOG.info("Partitions reassignment. [task-ID={}, consumer-group={}, consumer={}, topic-partitions={}]",
+                    context.getThisTaskId(), kafkaSpoutConfig.getConsumerGroupId(), kafkaConsumer, partitions);
 
             initialize(partitions);
         }
@@ -444,11 +444,14 @@ public class KafkaSpout<K, V> extends BaseRichSpout {
                 + " Partitions may have been reassigned. Ignoring message [{}]", msgId);
             return;
         }
-        emitted.remove(msgId);
         msgId.incrementNumFails();
         if (!retryService.schedule(msgId)) {
             LOG.debug("Reached maximum number of retries. Message [{}] being marked as acked.", msgId);
+            // this tuple should be removed from emitted only inside the ack() method. This is to ensure
+            // that the OffsetManager for that TopicPartition is updated and allows commit progression
             ack(msgId);
+        } else {
+            emitted.remove(msgId);
         }
     }
 
